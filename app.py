@@ -288,7 +288,7 @@ def generate_episode(access_token, news_pool, theme, focus, trusted_links):
 # ======================================
 # 🖥️ STREAMLIT UI
 # ======================================
-st.set_page_config("🎙️ Podcaster Companion Pro", layout="wide")
+st.set_page_config("🎙️ PodPulse", layout="wide")
 
 # 1. Auth Flow
 if "code" in st.query_params and "access_token" not in st.session_state:
@@ -314,7 +314,7 @@ if "source_list" not in st.session_state:
 
 # 3. Sidebar: Podcast Manager
 with st.sidebar:
-    st.header("📂 Podcast Manager")
+    st.header("📂 Podcasts Manager")
     podcasts_res = supabase.table("podcasts").select("*").eq("owner_email", user_email).execute()
     podcast_options = {p['podcast_name']: p for p in podcasts_res.data}
     
