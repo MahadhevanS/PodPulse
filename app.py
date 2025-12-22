@@ -110,6 +110,15 @@ def generate_episode(access_token, news_pool, theme, focus, trusted_links):
 # ======================================
 # 🖥️ STREAMLIT UI
 # ======================================
+st.markdown("""
+<style>
+div[data-testid="column"] button[class*="st-key-del_"]:hover {{
+    color: #ff4b4b !important;
+    background-color: transparent !important;
+}}
+</style>
+""", unsafe_allow_html=True)
+
 st.set_page_config("🎙️ PodPulse", layout="wide")
 
 # 1. Auth Flow
@@ -133,6 +142,16 @@ if "access_token" not in st.session_state:
 user_email = st.session_state["user_email"]
 if "source_list" not in st.session_state:
     st.session_state.source_list = []
+
+# 2.5 Logic to handle HTML-based deletes
+if "delete_idx" in st.query_params:
+    idx_to_del = int(st.query_params["delete_idx"])
+    if 0 <= idx_to_del < len(st.session_state.source_list):
+        st.session_state.source_list.pop(idx_to_del)
+        update_sources_in_db()
+    # Clear the param so it doesn't keep deleting on refresh
+    st.query_params.clear()
+    st.rerun()
 
 # 3. Sidebar: Podcast Manager
 with st.sidebar:
@@ -179,13 +198,22 @@ if selected_name != "➕ Add New Podcast":
     if st.session_state.source_list:
         st.write("Current Sources:")
         for i, url in enumerate(st.session_state.source_list):
-            # Using st.expander or container for a clean look
-            with st.container(border=True):
-                c1, c2 = st.columns([0.9, 0.1])
-                c1.text(url)
-                if c2.button("🗑️", key=f"del_{i}"):
+            # Create two columns: one for the label, one for the button
+            cols = st.columns([0.9, 0.1])
+            
+            with cols[0]:
+                # This div creates the dark background box
+                st.text_input(
+                    "Source URL", 
+                    value=url, 
+                    key=f"source_url_{i}", 
+                    label_visibility="collapsed"
+                )
+            
+            with cols[1]:
+                if st.button("X", key=f"del_{i}", type="tertiary", help="Delete source"):
                     st.session_state.source_list.pop(i)
-                    update_sources_in_db() # 👈 Save immediately
+                    update_sources_in_db()
                     st.rerun()
 
     if st.button("✨ Generate Weekly Intelligence"):
