@@ -1,0 +1,374 @@
+# import streamlit as st
+# import feedparser
+# import requests
+# import google.generativeai as genai
+# from google.oauth2.credentials import Credentials
+# from urllib.parse import urlencode
+# from supabase import create_client
+# from datetime import datetime
+
+# # ======================================
+# # 🔐 CONFIGURATION (Secrets)
+# # ======================================
+# CLIENT_ID = st.secrets["GOOGLE_CLIENT_ID"]
+# CLIENT_SECRET = st.secrets["GOOGLE_CLIENT_SECRET"]
+# REDIRECT_URI = st.secrets["GOOGLE_REDIRECT_URI"]
+
+# # Supabase Initialization
+# supabase = create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
+
+# AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
+# TOKEN_URL = "https://oauth2.googleapis.com/token"
+# SCOPES = [
+#     "https://www.googleapis.com/auth/generative-language.retriever",
+#     "openid",
+#     "https://www.googleapis.com/auth/userinfo.email"
+# ]
+
+# # ======================================
+# # 🔑 OAUTH & DB HELPERS
+# # ======================================
+# def get_auth_url():
+#     params = {
+#         "client_id": CLIENT_ID, "redirect_uri": REDIRECT_URI,
+#         "response_type": "code", "scope": " ".join(SCOPES),
+#         "access_type": "offline", "prompt": "consent"
+#     }
+#     return f"{AUTH_URL}?{urlencode(params)}"
+
+# def sync_user_to_db(token_data):
+#     # Get User Email from Google
+#     user_info = requests.get(
+#         "https://www.googleapis.com/oauth2/v3/userinfo", 
+#         headers={"Authorization": f"Bearer {token_data['access_token']}"}
+#     ).json()
+#     email = user_info["email"]
+    
+#     # Store refresh token and email in Supabase
+#     db_data = {
+#         "email": email,
+#         "refresh_token": token_data.get("refresh_token"), # Only sent on first login
+#         "last_login": datetime.now().isoformat()
+#     }
+#     # Upsert: Insert or update if email exists
+#     supabase.table("user_profiles").upsert(db_data).execute()
+#     return email
+
+# def get_fresh_access_token(refresh_token):
+#     payload = {
+#         "client_id": CLIENT_ID, "client_secret": CLIENT_SECRET,
+#         "refresh_token": refresh_token, "grant_type": "refresh_token"
+#     }
+#     r = requests.post(TOKEN_URL, data=payload)
+#     return r.json().get("access_token")
+
+# # ======================================
+# # 🎙️ EXECUTIVE PRODUCER AGENT
+# # ======================================
+# DEFAULT_RSS = [
+
+#     "https://techcrunch.com/feed/",
+
+#     "https://www.theverge.com/rss/index.xml"
+
+# ]
+
+# def fetch_all_news(rss_sources, limit=5):
+
+#     articles = []
+
+#     for src in rss_sources:
+
+#         feed = feedparser.parse(src)
+
+#         for entry in feed.entries[:limit]:
+
+#             articles.append(f"TITLE: {entry.get('title')}\nSUMMARY: {entry.get('summary', '')}\nURL: {entry.get('link')}\n")
+
+#     return "\n".join(articles)
+
+# def generate_episode(access_token, news_pool, theme, focus, trusted_links):
+#     # CRITICAL FIX: Wrap the raw token in a Credentials object
+#     creds = Credentials(token=access_token)
+    
+#     # Configure the library with the credentials object
+#     genai.configure(credentials=creds)
+
+#     # Use the 2.0 Flash model for speed and logic
+#     model = genai.GenerativeModel(model_name="gemini-2.0-flash")
+
+#     # Cleaned Prompt: Strictly uses provided RSS content
+#     prompt = f"""
+#     You are the 'Executive Producer' for the podcast: "{theme}".
+#     Your goal for this episode is: "{focus}".
+
+#     NEWS POOL (Starting Points):
+#     {news_pool}
+
+#     ADDITIONAL TRUSTED SOURCES:
+#     {trusted_links}
+
+#     TASK:
+#     1. Select 10 stories in total. Use the NEWS POOL above as your primary lead list, but you are ENCOURAGED to supplement this with 3-4 high-impact stories from the wider web that perfectly fit the show's theme.
+#     2. For stories outside the News Pool, draw from your internal real-time knowledge of trending events on websites like Reddit, Hacker News, or niche industry blogs.
+#     3. Format the response as high-energy 'Segment Cards'.
+#     4. Provide the direct, valid URL for every story. If you are citing a story from your internal knowledge, ensure the URL is the correct official source.
+#     5. Do NOT hallucinate fake news; only discuss verified events that have actually occurred.
+
+#     OUTPUT FORMAT:
+#     ### 💎 [Segment Title]
+#     **🎙️ Why It Fits:** [Brief explanation of relevance]
+#     **📝 Talking Points:** - [Bullet 1]
+#     - [Bullet 2]
+
+#     **🔗 Source:** [URL]
+    
+#     ---
+#     """
+
+#     response = model.generate_content(prompt)
+#     return response.text
+
+
+# # ======================================
+# # 🖥️ STREAMLIT UI
+# # ======================================
+# st.set_page_config("🎙️ Podcaster Companion", layout="wide")
+
+# # 1. Handle OAuth Callback
+# if "code" in st.query_params and "access_token" not in st.session_state:
+#     code = st.query_params["code"]
+#     token_data = requests.post(TOKEN_URL, data={
+#         "code": code, "client_id": CLIENT_ID, "client_secret": CLIENT_SECRET,
+#         "redirect_uri": REDIRECT_URI, "grant_type": "authorization_code"
+#     }).json()
+    
+#     st.session_state["access_token"] = token_data["access_token"]
+#     st.session_state["user_email"] = sync_user_to_db(token_data)
+#     st.query_params.clear()
+#     st.rerun()
+
+# # 2. Check Authentication State
+# if "access_token" not in st.session_state:
+#     st.title("🎧 Welcome, Producer")
+#     st.write("Sign in to build your weekly podcast intelligence.")
+#     st.link_button("🚀 Login with Google", get_auth_url())
+#     st.stop()
+
+# # 3. Main App View
+# user_email = st.session_state["user_email"]
+# st.success(f"Connected as {user_email}")
+
+# with st.sidebar:
+#     st.header("Show Settings")
+#     theme = st.text_input("Theme", "Future of Robotics")
+#     focus = st.text_input("Goal", "Ethics and AI Regulation")
+#     trusted_links = st.text_area("Custom RSS", "https://news.ycombinator.com/rss")
+#     if st.button("Logout"):
+#         st.session_state.clear()
+#         st.rerun()
+
+# if st.button("✨ Architect My Episode"):
+#     with st.spinner("Researching..."):
+#         # We could also fetch 'current_access_token' using refresh_token from DB here
+#         news_pool = fetch_all_news(["https://techcrunch.com/feed/"])
+#         script = generate_episode(st.session_state["access_token"], news_pool, theme, focus, trusted_links)
+#         st.markdown(script)
+
+
+import streamlit as st
+import feedparser
+import requests
+import google.generativeai as genai
+from google.oauth2.credentials import Credentials
+from urllib.parse import urlencode
+from supabase import create_client
+from datetime import datetime
+
+# ======================================
+# 🔐 CONFIGURATION (Secrets)
+# ======================================
+CLIENT_ID = st.secrets["GOOGLE_CLIENT_ID"]
+CLIENT_SECRET = st.secrets["GOOGLE_CLIENT_SECRET"]
+REDIRECT_URI = st.secrets["GOOGLE_REDIRECT_URI"]
+
+supabase = create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
+
+AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
+TOKEN_URL = "https://oauth2.googleapis.com/token"
+SCOPES = [
+    "https://www.googleapis.com/auth/generative-language.retriever",
+    "openid",
+    "https://www.googleapis.com/auth/userinfo.email"
+]
+
+# ======================================
+# 🔑 HELPERS & DB LOGIC
+# ======================================
+def get_auth_url():
+    params = {
+        "client_id": CLIENT_ID, "redirect_uri": REDIRECT_URI,
+        "response_type": "code", "scope": " ".join(SCOPES),
+        "access_type": "offline", "prompt": "consent"
+    }
+    return f"{AUTH_URL}?{urlencode(params)}"
+
+def sync_user_to_db(token_data):
+    user_info = requests.get("https://www.googleapis.com/oauth2/v3/userinfo", 
+                             headers={"Authorization": f"Bearer {token_data['access_token']}"}).json()
+    email = user_info["email"]
+    db_data = {"email": email, "refresh_token": token_data.get("refresh_token"), "last_login": datetime.now().isoformat()}
+    supabase.table("user_profiles").upsert(db_data).execute()
+    return email
+
+# Logic for dynamic source addition
+def update_sources_in_db():
+    """Pushes the current session_state.source_list to the specific podcast record in Supabase"""
+    if "current_podcast_id" in st.session_state:
+        supabase.table("podcasts").update({
+            "trusted_sources": st.session_state.source_list
+        }).eq("id", st.session_state.current_podcast_id).execute()
+
+def add_source():
+    new_url = st.session_state.url_input.strip()
+    if new_url and new_url not in st.session_state.source_list:
+        st.session_state.source_list.append(new_url)
+        update_sources_in_db() # 👈 Save immediately
+    st.session_state.url_input = ""
+
+def fetch_all_news(rss_sources, limit=5):
+    articles = []
+    for src in rss_sources:
+        feed = feedparser.parse(src)
+        for entry in feed.entries[:limit]:
+            articles.append(f"TITLE: {entry.get('title')}\nSUMMARY: {entry.get('summary', '')}\nURL: {entry.get('link')}\n")
+    return "\n".join(articles)
+
+def generate_episode(access_token, news_pool, theme, focus, trusted_links):
+    # CRITICAL FIX: Wrap the raw token in a Credentials object
+    creds = Credentials(token=access_token)
+    
+    # Configure the library with the credentials object
+    genai.configure(credentials=creds)
+
+    # Use the 2.0 Flash model for speed and logic
+    model = genai.GenerativeModel(model_name="gemini-2.0-flash")
+
+    # Cleaned Prompt: Strictly uses provided RSS content
+    prompt = f"""
+    You are the 'Executive Producer' for the podcast: "{theme}".
+    Your goal for this episode is: "{focus}".
+
+    NEWS POOL (Starting Points):
+    {news_pool}
+
+    ADDITIONAL TRUSTED SOURCES:
+    {trusted_links}
+
+    TASK:
+    1. Select 10 stories in total. Use the NEWS POOL above as your primary lead list, but you are ENCOURAGED to supplement this with 3-4 high-impact stories from the wider web that perfectly fit the show's theme.
+    2. For stories outside the News Pool, draw from your internal real-time knowledge of trending events on websites like Reddit, Hacker News, or niche industry blogs.
+    3. Format the response as high-energy 'Segment Cards'.
+    4. Provide the direct, valid URL for every story. If you are citing a story from your internal knowledge, ensure the URL is the correct official source.
+    5. Do NOT hallucinate fake news; only discuss verified events that have actually occurred.
+
+    OUTPUT FORMAT:
+    ### 💎 [Segment Title]
+    **🎙️ Why It Fits:** [Brief explanation of relevance]
+    **📝 Talking Points:** - [Bullet 1]
+    
+    **🔗 Source:** [URL] - [Bullet 2]
+    
+    ---
+    """
+
+    response = model.generate_content(prompt)
+    return response.text
+
+# ======================================
+# 🖥️ STREAMLIT UI
+# ======================================
+st.set_page_config("🎙️ Podcaster Companion Pro", layout="wide")
+
+# 1. Auth Flow
+if "code" in st.query_params and "access_token" not in st.session_state:
+    code = st.query_params["code"]
+    token_data = requests.post(TOKEN_URL, data={
+        "code": code, "client_id": CLIENT_ID, "client_secret": CLIENT_SECRET,
+        "redirect_uri": REDIRECT_URI, "grant_type": "authorization_code"
+    }).json()
+    st.session_state["access_token"] = token_data["access_token"]
+    st.session_state["user_email"] = sync_user_to_db(token_data)
+    st.query_params.clear()
+    st.rerun()
+
+if "access_token" not in st.session_state:
+    st.title("🎧 Welcome, Producer")
+    st.link_button("🚀 Login with Google", get_auth_url())
+    st.stop()
+
+# 2. State Initialization
+user_email = st.session_state["user_email"]
+if "source_list" not in st.session_state:
+    st.session_state.source_list = []
+
+# 3. Sidebar: Podcast Manager
+with st.sidebar:
+    st.header("📂 Podcast Manager")
+    podcasts_res = supabase.table("podcasts").select("*").eq("owner_email", user_email).execute()
+    podcast_options = {p['podcast_name']: p for p in podcasts_res.data}
+    
+    selected_name = st.selectbox("Switch Project:", list(podcast_options.keys()) + ["➕ Add New Podcast"])
+    
+    if selected_name == "➕ Add New Podcast":
+        with st.form("new_podcast"):
+            new_name = st.text_input("New Podcast Name")
+            if st.form_submit_button("Create Project"):
+                supabase.table("podcasts").insert({"owner_email": user_email, "podcast_name": new_name}).execute()
+                st.rerun()
+    else:
+        current_p = podcast_options[selected_name]
+        st.session_state.source_list = current_p.get('trusted_sources', [])
+        st.divider()
+        theme = st.text_input("Theme", value=current_p.get('theme', 'General Tech'))
+        focus = st.text_input("Goal", value=current_p.get('episode_goal', 'Weekly Updates'))
+        
+        if st.button("💾 Save Project Config"):
+            supabase.table("podcasts").update({
+                "theme": theme, "episode_goal": focus, "trusted_sources": st.session_state.source_list
+            }).eq("id", current_p['id']).execute()
+            st.toast("Project Synced!")
+
+# 4. Main View: Managed Sources UI
+st.title(f"🎧 Architect: {selected_name if selected_name != '➕ Add New Podcast' else 'Setup'}")
+
+if selected_name != "➕ Add New Podcast":
+    current_p = podcast_options[selected_name]
+    st.session_state.current_podcast_id = current_p['id'] # Store ID for syncing
+    
+    # LOAD data from DB if session is empty (prevents losing data on refresh)
+    if not st.session_state.source_list:
+        st.session_state.source_list = current_p.get('trusted_sources', [])
+
+    st.subheader("🔗 Managed Sources")
+    st.text_input("Add a website or RSS link:", key="url_input", on_change=add_source)
+
+    # Display the list
+    if st.session_state.source_list:
+        st.write("Current Sources:")
+        for i, url in enumerate(st.session_state.source_list):
+            # Using st.expander or container for a clean look
+            with st.container(border=True):
+                c1, c2 = st.columns([0.9, 0.1])
+                c1.text(url)
+                if c2.button("🗑️", key=f"del_{i}"):
+                    st.session_state.source_list.pop(i)
+                    update_sources_in_db() # 👈 Save immediately
+                    st.rerun()
+
+    if st.button("✨ Generate Weekly Intelligence"):
+        with st.spinner("Producer is researching the web..."):
+            news_pool = fetch_all_news(st.session_state.source_list if st.session_state.source_list else ["https://techcrunch.com/feed/"])
+            script = generate_episode(st.session_state["access_token"], news_pool, theme, focus, st.session_state.source_list)
+            st.markdown("## 📋 Production Script")
+            st.markdown(script)

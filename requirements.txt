@@ -1,0 +1,5 @@
+feedparser
+google-auth-oauthlib
+google-generativeai
+streamlit
+supabase
