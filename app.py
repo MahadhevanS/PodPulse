@@ -76,11 +76,12 @@ def generate_episode(access_token, news_pool, theme, focus, target_lang):
 
     OUTPUT RULES:
     1. Write the final script entirely in the {target_lang} script.
-    2. If the user input was in a native script, honor that specific cultural context.
+    2. If the user input was in a native script, honor that specific cultural context. don't restrict to regional boundaries; include contents apart from their region as well if relevant. 
     3. For stories outside the News Pool, draw from your internal real-time knowledge of trending events on websites like Reddit, Hacker News, or niche industry blogs on the internet.
     4. Format the response as high-energy 'Segment Cards'.
     5. Do NOT hallucinate fake news; only discuss verified events that have actually occurred. MUST provide the URLs as a proof for the user to verify the content    
-    6. Provide the direct, valid URL for every story. If you don't have an URL don't pick that story. 
+    6. Provide the direct, valid URL for every story. If you don't have an URL don't pick that story. URLs must be in english and no explanation is needed about the URL.
+    7. No translations or transcriptions in English or other languages; the entire output must be in {target_lang}.
 
     CRITICAL: You must translate BOTH the content and the structural labels (headings) 
     into {target_lang}. Use the following mapping for the structure:
